@@ -6,10 +6,12 @@
 		"lint:fix": "biome check . --write"
 	},
 	"dependencies": {
-		"hono": "^4.11.10"
+		"hono": "^4.11.10",
+		"octokit": "^5.0.5"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.2",
+		"@octokit/webhooks-types": "^7.6.1",
 		"@types/bun": "latest"
 	}
 }
