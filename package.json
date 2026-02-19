@@ -1,12 +1,15 @@
 {
 	"name": "pr-stack",
 	"scripts": {
-		"dev": "bun run --hot src/index.ts"
+		"dev": "bun run --hot src/index.ts",
+		"lint:check": "biome check .",
+		"lint:fix": "biome check . --write"
 	},
 	"dependencies": {
 		"hono": "^4.11.10"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.4.2",
 		"@types/bun": "latest"
 	}
 }
