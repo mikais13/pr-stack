@@ -1,7 +1,7 @@
 {
 	"name": "pr-stack",
 	"scripts": {
-		"dev": "bun run --hot src/index.ts",
+		"dev:api": "bun run --hot src/api/index.ts",
 		"lint:check": "biome check .",
 		"lint:fix": "biome check . --write"
 	},
