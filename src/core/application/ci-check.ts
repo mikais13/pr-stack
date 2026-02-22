@@ -1,6 +1,7 @@
 import type { CiCheckParams } from "../../api/schemas/ci-check.schema";
-import { getInstallationToken } from "../github/auth";
+import { getInstallationArtifacts } from "../github/auth";
 import { GitService } from "../services/git.service";
+import { OctokitService } from "../services/octokit.service";
 
 export async function shouldSkipCI({
 	before,
@@ -15,21 +16,20 @@ export async function shouldSkipCI({
 		};
 	}
 
+	const {
+		owner: { login: owner },
+		name: repo,
+		full_name,
+	} = repository;
+	const { octokit, token } = await getInstallationArtifacts(owner, repo);
+
+	const githubService = new OctokitService(octokit, owner, repo);
 	const gitService = new GitService("/tmp/repo");
 
-	const installationToken = await getInstallationToken(
-		repository.owner.login,
-		repository.name,
-	);
-	await gitService.cloneRepo(
-		`https://x-access-token:${installationToken}@github.com/${repository.full_name}.git`,
-		{
-			bare: true,
-		},
-	);
-
-	const beforeCommit = await gitService.getCommitFromSHA(before);
-	const afterCommit = await gitService.getCommitFromSHA(after);
+	const [beforeCommit, afterCommit] = await Promise.all([
+		githubService.getCommit(before),
+		githubService.getCommit(after),
+	]);
 
 	if (!beforeCommit || !afterCommit) {
 		return {
@@ -37,6 +37,14 @@ export async function shouldSkipCI({
 			message: `Could not retrieve commits for before SHA ${before} or after SHA ${after}`,
 		};
 	}
+
+	const beforeTreeSHA = beforeCommit.getTreeSHA();
+	const afterTreeSHA = afterCommit.getTreeSHA();
+
+	await gitService.cloneRepo(
+		`https://x-access-token:${token}@github.com/${full_name}.git`,
+		{ bare: true },
+	);
 
 	const currentBranchCommits = await gitService.traverseToSHA(
 		head.sha,
@@ -59,10 +67,10 @@ export async function shouldSkipCI({
 	}
 
 	// if tree shas at head are different, then this is minimal requirement for real changes to have occurred
-	if (beforeCommit.getTreeSHA() !== afterCommit.getTreeSHA()) {
+	if (beforeTreeSHA !== afterTreeSHA) {
 		return {
 			skipCI: false,
-			message: `Before commit tree SHA ${beforeCommit.getTreeSHA()} does not match after commit tree SHA ${afterCommit.getTreeSHA()}`,
+			message: `Before commit tree SHA ${beforeTreeSHA} does not match after commit tree SHA ${afterTreeSHA}`,
 		};
 	}
 

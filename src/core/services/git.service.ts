@@ -20,7 +20,11 @@ export class GitService {
 		{ bare }: { bare: boolean } = { bare: false },
 	): Promise<void> {
 		await $`rm -rf ${this.repoPath}`;
-		await $`git clone ${bare ? "--bare" : ""} ${repoUrl} ${this.repoPath}`;
+		if (bare) {
+			await $`git clone --bare ${repoUrl} ${this.repoPath}`;
+		} else {
+			await $`git clone ${repoUrl} ${this.repoPath}`;
+		}
 	}
 
 	public async traverseToSHA(
