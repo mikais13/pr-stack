@@ -2,6 +2,7 @@
 	"name": "pr-stack",
 	"scripts": {
 		"dev:api": "bun run --hot src/api/index.ts",
+		"types:check": "tsc --noEmit --skipLibCheck",
 		"lint:check": "biome check .",
 		"lint:fix": "biome check . --write",
 		"prepare:lefthook": "lefthook install && bun -e \"const fs=require('node:fs'); fs.writeFileSync('node_modules/lefthook/bin/index.js', fs.readFileSync('node_modules/lefthook/bin/index.js', 'utf8').replace(/^#!\\/usr\\/bin\\/env\\s+node/gm, '#!\\/usr\\/bin\\/env bun'))\"",
