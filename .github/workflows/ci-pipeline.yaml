@@ -42,13 +42,6 @@ jobs:
         if: steps.cache-check.outputs.cache-hit != 'true'
         uses: oven-sh/setup-bun@v2
 
-      - name: Setup pnpm
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-          run_install: false
-
       - name: Install dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
         run: bun install --frozen-lockfile --ignore-scripts
