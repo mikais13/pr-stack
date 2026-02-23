@@ -2,6 +2,7 @@
 	"name": "pr-stack",
 	"scripts": {
 		"dev:api": "bun run --hot src/api/index.ts",
+		"build:api": "bun build src/api/index.ts --outdir=dist --target=bun",
 		"types:check": "tsc --noEmit --skipLibCheck",
 		"lint:check": "biome check .",
 		"lint:fix": "biome check . --write",

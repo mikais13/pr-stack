@@ -1,0 +1,107 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: "2.4.2"
+
+      - name: Run Biome ci
+        run: biome ci . --error-on-warnings
+
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if node_modules cache exists
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
+          lookup-only: true
+
+      - name: Setup Bun
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Save node_modules cache
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
+  
+  type-check:
+    name: Check Types
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Restore node_modules cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-node_modules
+
+      - name: Install dependencies if cache was not hit
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run type check
+        run: bun types:check
+  
+  build:
+    name: Build API
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Restore node_modules cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-node_modules
+      
+      - name: Install dependencies if cache was not hit
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile --ignore-scripts
+      
+      - name: Build project
+        run: bun build:api
