@@ -8,11 +8,15 @@ export const commitSchema = z.object({
 	url: z.string(),
 });
 
+export type CommitData = z.infer<typeof commitSchema>;
+
 export const branchRefSchema = z.object({
 	label: z.string(),
 	ref: z.string(),
 	sha: z.string(),
 });
+
+export type BranchRefData = z.infer<typeof branchRefSchema>;
 
 export const pullRequestSchema = z.object({
 	number: z.number(),
@@ -22,8 +26,12 @@ export const pullRequestSchema = z.object({
 	base: branchRefSchema,
 });
 
+export type PullRequestData = z.infer<typeof pullRequestSchema>;
+
 export const repositorySchema = z.object({
 	name: z.string(),
 	full_name: z.string(),
 	owner: z.object({ login: z.string() }),
 });
+
+export type RepositoryData = z.infer<typeof repositorySchema>;

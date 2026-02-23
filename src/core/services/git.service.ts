@@ -15,6 +15,10 @@ export class GitService {
 			$(strings, ...values).cwd(this.repoPath);
 	}
 
+	public getRepoPath(): string {
+		return this.repoPath;
+	}
+
 	public async cloneRepo(
 		repoUrl: string,
 		{ bare }: { bare: boolean } = { bare: false },
@@ -77,5 +81,56 @@ export class GitService {
 			}
 		}
 		return new Commit(sha, treeSHA.trim(), parentCommits);
+	}
+
+	public async push(
+		branch: string,
+		{ forceWithLease }: { forceWithLease: boolean } = { forceWithLease: false },
+	): Promise<void> {
+		if (forceWithLease) {
+			await this.git`git push --force-with-lease origin ${branch}`;
+		} else {
+			await this.git`git push origin ${branch}`;
+		}
+	}
+
+	/**
+	 * @throws if rebase fails due to conflicts, leaving conflicts to be resolved manually
+	 */
+	public async rebase(branchRef: string, newBaseRef: string): Promise<string> {
+		await this.git`git fetch origin ${newBaseRef}`;
+		await this.git`git fetch origin ${branchRef}`;
+		await this.git`git switch ${branchRef}`;
+		return await this.git`git rebase ${newBaseRef}`.text();
+	}
+
+	public async getBlame(
+		filePath: string,
+		startLine: number,
+		endLine: number,
+		head: string = "HEAD",
+	): Promise<string> {
+		const blameOutput = await this
+			.git`git blame ${head} -L ${startLine},${endLine} --porcelain -- ${filePath} | grep -E '^[0-9a-f]{40}'`;
+		return blameOutput.text();
+	}
+
+	public async stageChanges(filePath: string): Promise<void> {
+		await this.git`git add ${filePath}`;
+	}
+
+	public async continueRebase(): Promise<void> {
+		await this.git`git rebase --continue`;
+	}
+
+	public async abortRebase(): Promise<void> {
+		await this.git`git rebase --abort`;
+	}
+
+	public async resolveConflict(
+		filePath: string,
+		resolutionStrategy: "ours" | "theirs",
+	): Promise<void> {
+		await this.git`git checkout --${resolutionStrategy} -- ${filePath}`;
 	}
 }
