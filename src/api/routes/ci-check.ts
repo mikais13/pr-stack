@@ -5,11 +5,11 @@ import { ciCheckParamsSchema } from "../schemas/ci-check.schema";
 const ci = new Hono();
 
 ci.post("/", async (c: Context) => {
-	const params = ciCheckParamsSchema.parse(await c.req.json());
-	if (!params) {
+	const parsed = ciCheckParamsSchema.safeParse(await c.req.json());
+	if (!parsed.success) {
 		return c.json({ error: "Invalid parameters" }, 400);
 	}
-	const result = await shouldSkipCI(params);
+	const result = await shouldSkipCI(parsed.data);
 	return c.json(result, 200);
 });
 
