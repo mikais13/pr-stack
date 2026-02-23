@@ -84,6 +84,10 @@ export class GitService {
 		return new Commit(sha, treeSHA.trim(), parentCommits);
 	}
 
+	public async clearRemote(): Promise<void> {
+		await this.git`git remote remove origin`;
+	}
+
 	public async push(
 		branch: string,
 		{ forceWithLease }: { forceWithLease: boolean } = { forceWithLease: false },
