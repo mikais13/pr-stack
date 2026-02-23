@@ -3,16 +3,29 @@ import { Commit } from "../models/commit.model";
 
 export class GitService {
 	private repoPath: string;
+	private token?: string;
 	private git;
 	private commitMap: Map<string, Commit> = new Map();
-	public constructor(repoPath: string) {
+	public constructor(repoPath: string, token?: string) {
 		this.repoPath = repoPath;
+		this.token = token;
 		this.git = this.gitIn();
+	}
+
+	private authEnv(): Record<string, string> {
+		if (!this.token) return {};
+		return {
+			GIT_CONFIG_COUNT: "1",
+			GIT_CONFIG_KEY_0: "http.extraheader",
+			GIT_CONFIG_VALUE_0: `Authorization: Bearer ${this.token}`,
+		};
 	}
 
 	private gitIn() {
 		return (strings: TemplateStringsArray, ...values: ShellExpression[]) =>
-			$(strings, ...values).cwd(this.repoPath);
+			$(strings, ...values)
+				.cwd(this.repoPath)
+				.env(this.authEnv());
 	}
 
 	public getRepoPath(): string {
@@ -25,9 +38,9 @@ export class GitService {
 	): Promise<void> {
 		await $`rm -rf ${this.repoPath}`;
 		if (bare) {
-			await $`git clone --bare ${repoUrl} ${this.repoPath}`;
+			await $`git clone --bare ${repoUrl} ${this.repoPath}`.env(this.authEnv());
 		} else {
-			await $`git clone ${repoUrl} ${this.repoPath}`;
+			await $`git clone ${repoUrl} ${this.repoPath}`.env(this.authEnv());
 		}
 	}
 

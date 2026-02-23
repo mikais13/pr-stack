@@ -26,7 +26,7 @@ export async function shouldSkipCI({
 
 	const githubService = new OctokitService(octokit, owner, repo);
 	const clonePath = `/tmp/ci-check-${after}`;
-	const gitService = new GitService(clonePath);
+	const gitService = new GitService(clonePath, token);
 
 	const [beforeCommit, afterCommit] = await Promise.all([
 		githubService.getCommit(before),
@@ -44,11 +44,9 @@ export async function shouldSkipCI({
 	const afterTreeSHA = afterCommit.getTreeSHA();
 
 	try {
-		await gitService.cloneRepo(
-			`https://x-access-token:${token}@github.com/${full_name}.git`,
-			{ bare: true },
-		);
-		await gitService.clearRemote();
+		await gitService.cloneRepo(`https://github.com/${full_name}.git`, {
+			bare: true,
+		});
 	} catch {
 		return {
 			skipCI: false,

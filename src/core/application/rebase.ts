@@ -28,7 +28,7 @@ export async function rebase({
 
 	const githubService = new OctokitService(octokit, owner, repo);
 	const clonePath = `/tmp/rebase-${head.sha}`;
-	const gitService = new GitService(clonePath);
+	const gitService = new GitService(clonePath, token);
 
 	console.log(`[rebase] Fetching open PRs based on "${head.ref}"`);
 	const pullRequestsToRebase = await githubService.getPullRequestsByBase(
@@ -41,10 +41,9 @@ export async function rebase({
 	);
 
 	console.log(`[rebase] Cloning ${fullName}`);
-	await gitService.cloneRepo(
-		`https://x-access-token:${token}@github.com/${fullName}.git`,
-		{ bare: false },
-	);
+	await gitService.cloneRepo(`https://github.com/${fullName}.git`, {
+		bare: false,
+	});
 	console.log(`[rebase] Clone complete`);
 
 	try {
@@ -90,7 +89,6 @@ export async function rebase({
 
 		console.log(`[rebase] All done`);
 	} finally {
-		await gitService.clearRemote();
 		await $`rm -rf ${clonePath}`;
 	}
 }
