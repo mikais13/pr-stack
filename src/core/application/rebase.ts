@@ -27,7 +27,8 @@ export async function rebase({
 	console.log(`[rebase] Got installation artifacts for ${owner}/${repo}`);
 
 	const githubService = new OctokitService(octokit, owner, repo);
-	const gitService = new GitService("/tmp/repo");
+	const clonePath = `/tmp/rebase-${head.sha}`;
+	const gitService = new GitService(clonePath);
 
 	console.log(`[rebase] Fetching open PRs based on "${head.ref}"`);
 	const pullRequestsToRebase = await githubService.getPullRequestsByBase(
@@ -46,45 +47,52 @@ export async function rebase({
 	);
 	console.log(`[rebase] Clone complete`);
 
-	console.log(`[rebase] Traversing commits from ${head.sha} to ${base.sha}`);
-	const commitsIntroducedByPR = await gitService.traverseToSHA(
-		head.sha,
-		base.sha,
-	);
-	if (!commitsIntroducedByPR) {
-		throw new Error(
-			`Failed to traverse commits from head SHA ${head.sha} to base SHA ${base.sha}`,
+	try {
+		console.log(`[rebase] Traversing commits from ${head.sha} to ${base.sha}`);
+		const commitsIntroducedByPR = await gitService.traverseToSHA(
+			head.sha,
+			base.sha,
 		);
-	}
-	console.log(
-		`[rebase] Found ${commitsIntroducedByPR.length} commit(s) introduced by merged PR`,
-	);
-
-	for (const pr of pullRequestsToRebase) {
+		if (!commitsIntroducedByPR) {
+			throw new Error(
+				`Failed to traverse commits from head SHA ${head.sha} to base SHA ${base.sha}`,
+			);
+		}
 		console.log(
-			`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${base.ref})`,
+			`[rebase] Found ${commitsIntroducedByPR.length} commit(s) introduced by merged PR`,
 		);
-		await performRebase(
-			gitService,
-			pr.getHead(),
-			base.ref,
-			commitsIntroducedByPR,
-		);
-		console.log(`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`);
-		await gitService.push(pr.getHead(), { forceWithLease: true });
-		console.log(`[rebase] Push complete, updating base branch on GitHub`);
-		await octokit.rest.pulls.update({
-			owner,
-			repo,
-			pull_number: pr.getNumber(),
-			base: base.ref,
-		});
-		console.log(
-			`[rebase] PR #${pr.getNumber()} done — base updated to "${base.ref}"`,
-		);
-	}
 
-	console.log(`[rebase] All done`);
+		for (const pr of pullRequestsToRebase) {
+			console.log(
+				`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${base.ref})`,
+			);
+			await performRebase(
+				gitService,
+				pr.getHead(),
+				base.ref,
+				commitsIntroducedByPR,
+			);
+			console.log(
+				`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`,
+			);
+			await gitService.push(pr.getHead(), { forceWithLease: true });
+			console.log(`[rebase] Push complete, updating base branch on GitHub`);
+			await octokit.rest.pulls.update({
+				owner,
+				repo,
+				pull_number: pr.getNumber(),
+				base: base.ref,
+			});
+			console.log(
+				`[rebase] PR #${pr.getNumber()} done — base updated to "${base.ref}"`,
+			);
+		}
+
+		console.log(`[rebase] All done`);
+	} finally {
+		await gitService.clearRemote();
+		await $`rm -rf ${clonePath}`;
+	}
 }
 
 function extractConflictingFiles(errorMessage: string): string[] {
