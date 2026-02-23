@@ -37,7 +37,8 @@ export class GitService {
 	): Promise<Commit[] | null> {
 		const commitsString = await this
 			.git`git rev-list --ancestry-path ${target}..${curr}`.text();
-		const hashes = commitsString.trim().split("\n");
+		const trimmed = commitsString.trim();
+		const hashes = trimmed ? trimmed.split("\n") : [];
 		hashes.push(target);
 		const commits = await Promise.all(
 			hashes.map(async (commit) => await this.getCommitFromSHA(commit)),
