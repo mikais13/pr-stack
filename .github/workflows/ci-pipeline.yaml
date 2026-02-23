@@ -51,7 +51,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Save node_modules cache
         if: steps.cache-check.outputs.cache-hit != 'true'
@@ -81,7 +81,7 @@ jobs:
 
       - name: Install dependencies if cache was not hit
         if: steps.cache-check.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Run type check
         run: bun types:check
@@ -107,7 +107,7 @@ jobs:
       
       - name: Install dependencies if cache was not hit
         if: steps.cache-check.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
       
       - name: Build project
         run: bun build
