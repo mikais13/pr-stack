@@ -1,5 +1,6 @@
 {
 	"name": "pr-stack",
+	"license": "MIT",
 	"scripts": {
 		"dev:api": "bun run --hot src/api/index.ts",
 		"build:api": "bun build src/api/index.ts --outdir=dist --target=bun",
