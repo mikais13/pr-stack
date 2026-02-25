@@ -33,7 +33,7 @@ jobs:
       - name: Deploy to Fly.io
         run: |
           flyctl deploy --remote-only --config fly.toml \
-            --build-secret APP_ID="${{ secrets.APP_ID }}" \
+            --build-secret APP_ID="${{ vars.APP_ID }}" \
             --build-secret PRIVATE_KEY="${{ secrets.PRIVATE_KEY }}" \
             --build-secret WEBHOOK_SECRET="${{ secrets.WEBHOOK_SECRET }}" \
             -a pr-stack
