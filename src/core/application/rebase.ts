@@ -1,14 +1,23 @@
+import { Deque } from "@datastructures-js/deque";
 import { $ } from "bun";
+import type { Octokit } from "octokit";
 import type {
 	PullRequestData,
 	RepositoryData,
 } from "../../api/schemas/shared.schema";
 import { getInstallationArtifacts } from "../github/auth";
 import type { Commit } from "../models/commit.model";
+import type { PullRequest } from "../models/pull-request.model";
 import { GitService } from "../services/git.service";
 import { OctokitService } from "./../services/octokit.service";
 
-export async function rebase({
+type WorkItem = {
+	sourceRef: string;
+	rebaseOnto: string;
+	commitsIntroduced: Commit[];
+};
+
+export async function traverseRebasedPRs({
 	repository: {
 		owner: { login: owner },
 		name: repo,
@@ -29,16 +38,6 @@ export async function rebase({
 	const githubService = new OctokitService(octokit, owner, repo);
 	const clonePath = `/tmp/rebase-${head.sha}`;
 	const gitService = new GitService(clonePath, token);
-
-	console.log(`[rebase] Fetching open PRs based on "${head.ref}"`);
-	const pullRequestsToRebase = await githubService.getPullRequestsByBase(
-		head.ref,
-		"open",
-	);
-	console.log(
-		`[rebase] Found ${pullRequestsToRebase.length} PR(s) to rebase:`,
-		pullRequestsToRebase.map((pr) => `#${pr.getNumber()} (${pr.getHead()})`),
-	);
 
 	console.log(`[rebase] Cloning ${fullName}`);
 	await gitService.cloneRepo(`https://github.com/${fullName}.git`, {
@@ -61,36 +60,132 @@ export async function rebase({
 			`[rebase] Found ${commitsIntroducedByPR.length} commit(s) introduced by merged PR`,
 		);
 
-		for (const pr of pullRequestsToRebase) {
+		const queue = new Deque<WorkItem>([
+			{
+				sourceRef: head.ref,
+				rebaseOnto: base.ref,
+				commitsIntroduced: commitsIntroducedByPR,
+			},
+		]);
+
+		while (queue.size() > 0) {
+			const workItem = queue.popFront();
+			if (!workItem) {
+				break;
+			}
+			const { sourceRef, rebaseOnto, commitsIntroduced } = workItem;
+
+			console.log(`[rebase] Fetching open PRs based on "${sourceRef}"`);
+			const dependentPRs = await githubService.getPullRequestsByBase(
+				sourceRef,
+				"open",
+			);
 			console.log(
-				`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${base.ref})`,
+				`[rebase] Found ${dependentPRs.length} PR(s) with base "${sourceRef}":`,
+				dependentPRs.map((pr) => `#${pr.getNumber()} (${pr.getHead()})`),
 			);
-			await performRebase(
-				gitService,
-				pr.getHead(),
-				base.ref,
-				commitsIntroducedByPR,
-			);
-			console.log(
-				`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`,
-			);
-			await gitService.push(pr.getHead(), { forceWithLease: true });
-			console.log(`[rebase] Push complete, updating base branch on GitHub`);
-			await octokit.rest.pulls.update({
-				owner,
-				repo,
-				pull_number: pr.getNumber(),
-				base: base.ref,
-			});
-			console.log(
-				`[rebase] PR #${pr.getNumber()} done — base updated to "${base.ref}"`,
-			);
+
+			const failures: Array<{ pr: PullRequest; error: unknown }> = [];
+
+			for (const pr of dependentPRs) {
+				console.log(
+					`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${rebaseOnto})`,
+				);
+				let commitsFromThisPR: Commit[] | null;
+				try {
+					commitsFromThisPR = await rebase(
+						gitService,
+						octokit,
+						owner,
+						repo,
+						pr,
+						rebaseOnto,
+						commitsIntroduced,
+					);
+				} catch (error) {
+					console.error(
+						`[rebase] PR #${pr.getNumber()} (${pr.getHead()}) FAILED — skipping its dependents. Error:`,
+						error,
+					);
+					failures.push({ pr, error });
+					continue;
+				}
+
+				if (!commitsFromThisPR) {
+					console.error(
+						`[rebase] PR #${pr.getNumber()}: rebase succeeded but commit traversal returned null — ` +
+							`all PRs stacked on "${pr.getHead()}" will NOT be rebased. Manual rebase required.`,
+					);
+					continue;
+				}
+				console.log(
+					`[rebase] PR #${pr.getNumber()} done — base updated to "${rebaseOnto}"`,
+				);
+				queue.pushBack({
+					sourceRef: pr.getHead(),
+					rebaseOnto: pr.getHead(),
+					commitsIntroduced: commitsFromThisPR,
+				});
+			}
+
+			if (failures.length > 0) {
+				throw new Error(
+					`[rebase] ${failures.length} PR(s) failed: ` +
+						failures
+							.map((f) => `#${f.pr.getNumber()} (${f.pr.getHead()})`)
+							.join(", "),
+				);
+			}
 		}
 
 		console.log(`[rebase] All done`);
 	} finally {
 		await $`rm -rf ${clonePath}`;
 	}
+}
+
+async function rebase(
+	gitService: GitService,
+	octokit: Octokit,
+	owner: string,
+	repo: string,
+	pr: PullRequest,
+	rebaseOnto: string,
+	commitsIntroduced: Commit[],
+): Promise<Commit[] | null> {
+	// Step 1: local rebase (throws on unresolvable conflict — no remote changes yet)
+	await performRebase(gitService, pr.getHead(), rebaseOnto, commitsIntroduced);
+	console.log(`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`);
+
+	// Step 2: push — if this throws, remote is unchanged
+	try {
+		await gitService.push(pr.getHead(), { forceWithLease: true });
+	} catch (error) {
+		throw new Error(
+			`[rebase] PR #${pr.getNumber()}: git push failed — ` +
+				`branch "${pr.getHead()}" was rebased locally but NOT pushed to remote. ` +
+				`Remote is unchanged. Cause: ${error}`,
+		);
+	}
+	console.log(`[rebase] Push complete, updating base branch on GitHub`);
+
+	// Step 3: GitHub metadata update — if this throws, branch IS already pushed
+	try {
+		await octokit.rest.pulls.update({
+			owner,
+			repo,
+			pull_number: pr.getNumber(),
+			base: rebaseOnto,
+		});
+	} catch (error) {
+		throw new Error(
+			`[rebase] PR #${pr.getNumber()}: GitHub base update FAILED after successful push. ` +
+				`Branch "${pr.getHead()}" is now on new history but PR base still shows "${pr.getBase()}". ` +
+				`Manual update of the PR base to "${rebaseOnto}" is required. Cause: ${error}`,
+		);
+	}
+
+	return gitService.traverseToSHA(pr.getHead(), rebaseOnto);
 }
 
 function extractConflictingFiles(errorMessage: string): string[] {
