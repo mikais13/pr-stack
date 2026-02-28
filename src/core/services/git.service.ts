@@ -38,10 +38,13 @@ export class GitService {
 		{ bare }: { bare: boolean } = { bare: false },
 	): Promise<void> {
 		await $`rm -rf ${this.repoPath}`;
+		const configArgs = this.token
+			? ["-c", `http.extraheader=Authorization: Bearer ${this.token}`]
+			: [];
 		if (bare) {
-			await $`git clone --bare ${repoUrl} ${this.repoPath}`.env(this.authEnv());
+			await $`git ${configArgs} clone --bare ${repoUrl} ${this.repoPath}`;
 		} else {
-			await $`git clone ${repoUrl} ${this.repoPath}`.env(this.authEnv());
+			await $`git ${configArgs} clone ${repoUrl} ${this.repoPath}`;
 		}
 	}
 
