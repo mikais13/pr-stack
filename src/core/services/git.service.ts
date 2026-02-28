@@ -14,11 +14,14 @@ export class GitService {
 
 	private authEnv(): Record<string, string> {
 		if (!this.token) return {};
+		const encoded = Buffer.from(`x-access-token:${this.token}`).toString(
+			"base64",
+		);
 		return {
 			...process.env,
 			GIT_CONFIG_COUNT: "1",
 			GIT_CONFIG_KEY_0: "http.extraheader",
-			GIT_CONFIG_VALUE_0: `Authorization: Bearer ${this.token}`,
+			GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
 		};
 	}
 
@@ -39,7 +42,10 @@ export class GitService {
 	): Promise<void> {
 		await $`rm -rf ${this.repoPath}`;
 		const configArgs = this.token
-			? ["-c", `http.extraheader=Authorization: Bearer ${this.token}`]
+			? [
+					"-c",
+					`http.extraheader=Authorization: Basic ${Buffer.from(`x-access-token:${this.token}`).toString("base64")}`,
+				]
 			: [];
 		if (bare) {
 			await $`git ${configArgs} clone --bare ${repoUrl} ${this.repoPath}`;
