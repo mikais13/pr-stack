@@ -15,6 +15,7 @@ export class GitService {
 	private authEnv(): Record<string, string> {
 		if (!this.token) return {};
 		return {
+			...process.env,
 			GIT_CONFIG_COUNT: "1",
 			GIT_CONFIG_KEY_0: "http.extraheader",
 			GIT_CONFIG_VALUE_0: `Authorization: Bearer ${this.token}`,
