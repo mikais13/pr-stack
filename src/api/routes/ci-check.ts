@@ -9,8 +9,16 @@ ci.post("/", async (c: Context) => {
 	if (!parsed.success) {
 		return c.json({ error: "Invalid parameters" }, 400);
 	}
-	const result = await shouldSkipCI(parsed.data);
-	return c.json(result, 200);
+	try {
+		const result = await shouldSkipCI(parsed.data);
+		return c.json(result, 200);
+	} catch (err) {
+		console.error("ci-check error:", err);
+		return c.json(
+			{ skipCI: false, message: "CI check failed, proceeding with CI" },
+			500,
+		);
+	}
 });
 
 export default ci;
