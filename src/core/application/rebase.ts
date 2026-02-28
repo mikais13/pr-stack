@@ -166,6 +166,7 @@ async function rebase(
 			repo,
 			pull_number: pr.getNumber(),
 			base: rebaseOnto,
+			state: "open",
 		});
 	} catch (error) {
 		throw new Error(
