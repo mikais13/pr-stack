@@ -112,14 +112,24 @@ export class GitService {
 		}
 	}
 
+	public async fetchAndGetSHA(branchRef: string): Promise<string> {
+		await this.git`git fetch origin ${branchRef}`;
+		return (await this.git`git rev-parse FETCH_HEAD`.text()).trim();
+	}
+
 	/**
 	 * @throws if rebase fails due to conflicts, leaving conflicts to be resolved manually
 	 */
-	public async rebase(branchRef: string, newBaseRef: string): Promise<string> {
+	public async rebase(
+		branchRef: string,
+		newBaseRef: string,
+		upstreamSHA: string,
+	): Promise<string> {
 		await this.git`git fetch origin ${newBaseRef}`;
 		await this.git`git fetch origin ${branchRef}`;
 		await this.git`git switch ${branchRef}`;
-		return await this.git`git rebase ${newBaseRef}`.text();
+		return await this
+			.git`git rebase --onto ${newBaseRef} ${upstreamSHA}`.text();
 	}
 
 	public async getBlame(

@@ -6,7 +6,6 @@ import type {
 	RepositoryData,
 } from "../../api/schemas/shared.schema";
 import { getInstallationArtifacts } from "../github/auth";
-import type { Commit } from "../models/commit.model";
 import type { PullRequest } from "../models/pull-request.model";
 import { GitService } from "../services/git.service";
 import { OctokitService } from "./../services/octokit.service";
@@ -15,8 +14,8 @@ const REBASE_OPT_IN_LABEL = "pr-stack:auto-rebase";
 
 type WorkItem = {
 	sourceRef: string;
+	sourceRefSHA: string;
 	rebaseOnto: string;
-	commitsIntroduced: Commit[];
 };
 
 export async function traverseRebasedPRs({
@@ -48,25 +47,11 @@ export async function traverseRebasedPRs({
 	console.log(`[rebase] Clone complete`);
 
 	try {
-		console.log(`[rebase] Traversing commits from ${head.sha} to ${base.sha}`);
-		const commitsIntroducedByPR = await gitService.traverseToSHA(
-			head.sha,
-			base.sha,
-		);
-		if (!commitsIntroducedByPR) {
-			throw new Error(
-				`Failed to traverse commits from head SHA ${head.sha} to base SHA ${base.sha}`,
-			);
-		}
-		console.log(
-			`[rebase] Found ${commitsIntroducedByPR.length} commit(s) introduced by merged PR`,
-		);
-
 		const queue = new Deque<WorkItem>([
 			{
 				sourceRef: head.ref,
+				sourceRefSHA: head.sha,
 				rebaseOnto: base.ref,
-				commitsIntroduced: commitsIntroducedByPR,
 			},
 		]);
 
@@ -75,7 +60,7 @@ export async function traverseRebasedPRs({
 			if (!workItem) {
 				break;
 			}
-			const { sourceRef, rebaseOnto, commitsIntroduced } = workItem;
+			const { sourceRef, sourceRefSHA, rebaseOnto } = workItem;
 
 			console.log(`[rebase] Fetching open PRs based on "${sourceRef}"`);
 			const dependentPRs = await githubService.getPullRequestsByBase(
@@ -103,16 +88,16 @@ export async function traverseRebasedPRs({
 				console.log(
 					`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${rebaseOnto})`,
 				);
-				let commitsFromThisPR: Commit[] | null;
+				const oldPRHeadSHA = await gitService.fetchAndGetSHA(pr.getHead());
 				try {
-					commitsFromThisPR = await rebase(
+					await rebase(
 						gitService,
 						octokit,
 						owner,
 						repo,
 						pr,
 						rebaseOnto,
-						commitsIntroduced,
+						sourceRefSHA,
 					);
 				} catch (error) {
 					console.error(
@@ -123,20 +108,13 @@ export async function traverseRebasedPRs({
 					continue;
 				}
 
-				if (!commitsFromThisPR) {
-					console.error(
-						`[rebase] PR #${pr.getNumber()}: rebase succeeded but commit traversal returned null — ` +
-							`all PRs stacked on "${pr.getHead()}" will NOT be rebased. Manual rebase required.`,
-					);
-					continue;
-				}
 				console.log(
 					`[rebase] PR #${pr.getNumber()} done — base updated to "${rebaseOnto}"`,
 				);
 				queue.pushBack({
 					sourceRef: pr.getHead(),
+					sourceRefSHA: oldPRHeadSHA,
 					rebaseOnto: pr.getHead(),
-					commitsIntroduced: commitsFromThisPR,
 				});
 			}
 
@@ -163,10 +141,10 @@ async function rebase(
 	repo: string,
 	pr: PullRequest,
 	rebaseOnto: string,
-	commitsIntroduced: Commit[],
-): Promise<Commit[] | null> {
+	upstreamSHA: string,
+): Promise<void> {
 	// Step 1: local rebase (throws on unresolvable conflict — no remote changes yet)
-	await performRebase(gitService, pr.getHead(), rebaseOnto, commitsIntroduced);
+	await performRebase(gitService, pr.getHead(), rebaseOnto, upstreamSHA);
 	console.log(`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`);
 
 	// Step 2: push — if this throws, remote is unchanged
@@ -196,8 +174,6 @@ async function rebase(
 				`Manual update of the PR base to "${rebaseOnto}" is required. Cause: ${error}`,
 		);
 	}
-
-	return gitService.traverseToSHA(pr.getHead(), rebaseOnto);
 }
 
 function extractConflictingFiles(errorMessage: string): string[] {
@@ -225,96 +201,20 @@ async function performRebase(
 	gitService: GitService,
 	branchRef: string,
 	newBase: string,
-	commitsIntroducedByPR: Commit[],
+	upstreamSHA: string,
 ) {
 	console.log(`[performRebase] Rebasing "${branchRef}" onto "${newBase}"`);
 	try {
-		await gitService.rebase(branchRef, newBase);
+		await gitService.rebase(branchRef, newBase, upstreamSHA);
 		console.log(`[performRebase] Clean rebase — no conflicts`);
 	} catch (error) {
-		if (!(error instanceof $.ShellError)) {
-			throw error;
-		}
-		const errorMessage = error.stderr.toString() ?? error.message;
-		const conflictingFiles = extractConflictingFiles(errorMessage);
-		console.log(
-			`[performRebase] Rebase hit conflicts in ${conflictingFiles.length} file(s):`,
-			conflictingFiles,
+		if (!(error instanceof $.ShellError)) throw error;
+		await gitService.abortRebase();
+		const conflictingFiles = extractConflictingFiles(
+			error.stderr.toString() ?? error.message,
 		);
-
-		const fileToConflictsMap: Record<string, { start: number; end: number }[]> =
-			{};
-		for (const file of conflictingFiles) {
-			const fileContent = await $`cat ${file}`
-				.cwd(gitService.getRepoPath())
-				.text();
-			const lines = fileContent.split("\n");
-			const conflictPositions: { start: number; end: number }[] = [];
-
-			let lineNumber = 0;
-			let currentStart = 0;
-			let inIncomingSection = false;
-
-			for (const line of lines) {
-				if (line.startsWith("<<<<<<<")) {
-					currentStart = lineNumber + 1;
-				} else if (line.startsWith("=======")) {
-					conflictPositions.push({ start: currentStart, end: lineNumber });
-					inIncomingSection = true;
-				} else if (line.startsWith(">>>>>>>")) {
-					inIncomingSection = false;
-				} else if (!inIncomingSection) {
-					lineNumber++;
-				}
-			}
-			fileToConflictsMap[file] = conflictPositions;
-			console.log(
-				`[performRebase] "${file}" has ${conflictPositions.length} conflict region(s)`,
-			);
-		}
-
-		for (const [file, conflicts] of Object.entries(fileToConflictsMap)) {
-			for (const { start, end } of conflicts) {
-				console.log(`[performRebase] Blaming "${file}" lines ${start}-${end}`);
-				const blameInfo = await gitService.getBlame(
-					file,
-					start,
-					end,
-					branchRef,
-				);
-				const blamedCommitSHA = blameInfo.split(" ")[0];
-				console.log(`[performRebase] Blamed commit: ${blamedCommitSHA}`);
-				const blamedCommit = await gitService.getCommitFromSHA(blamedCommitSHA);
-				// if blamed commit is in the merged pr branch, then we know that the change is intended
-				if (
-					blamedCommit &&
-					commitsIntroducedByPR.some(
-						(c) => c.getSHA() === blamedCommit.getSHA(),
-					)
-				) {
-					console.log(
-						`[performRebase] Blamed commit is from merged PR — resolving conflict in "${file}" by keeping incoming`,
-					);
-					// resolve the conflict by keeping the incoming change (i.e. the change from the merged PR)
-					await gitService.resolveConflict(file, "theirs");
-				} else {
-					console.log(
-						`[performRebase] Blamed commit is not from merged PR — cannot auto-resolve "${file}", aborting`,
-					);
-					await gitService.abortRebase();
-					throw new Error(
-						`Conflict in file ${file} could not be automatically resolved. Please resolve manually.`,
-					);
-				}
-			}
-		}
-
-		// after resolving conflicts, continue the rebase
-		console.log(
-			`[performRebase] All conflicts resolved, staging and continuing rebase`,
+		throw new Error(
+			`Conflict in ${conflictingFiles.length} file(s) — manual resolution required: ${conflictingFiles.join(", ")}`,
 		);
-		await gitService.stageChanges(".");
-		await gitService.continueRebase();
-		console.log(`[performRebase] Rebase continued successfully`);
 	}
 }
