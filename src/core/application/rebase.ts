@@ -11,6 +11,8 @@ import type { PullRequest } from "../models/pull-request.model";
 import { GitService } from "../services/git.service";
 import { OctokitService } from "./../services/octokit.service";
 
+const REBASE_OPT_IN_LABEL = "pr-stack:auto-rebase";
+
 type WorkItem = {
 	sourceRef: string;
 	rebaseOnto: string;
@@ -85,9 +87,19 @@ export async function traverseRebasedPRs({
 				dependentPRs.map((pr) => `#${pr.getNumber()} (${pr.getHead()})`),
 			);
 
+			const eligiblePRs = dependentPRs.filter((pr) =>
+				pr.getLabels().includes(REBASE_OPT_IN_LABEL),
+			);
+			const skipped = dependentPRs.length - eligiblePRs.length;
+			if (skipped > 0) {
+				console.log(
+					`[rebase] Skipping ${skipped} PR(s) without "${REBASE_OPT_IN_LABEL}" label`,
+				);
+			}
+
 			const failures: Array<{ pr: PullRequest; error: unknown }> = [];
 
-			for (const pr of dependentPRs) {
+			for (const pr of eligiblePRs) {
 				console.log(
 					`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${rebaseOnto})`,
 				);

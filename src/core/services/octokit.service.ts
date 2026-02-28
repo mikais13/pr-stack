@@ -45,8 +45,18 @@ export class OctokitService {
 			);
 		}
 		return response.data.map(
-			(pr: { number: number; base: { ref: string }; head: { ref: string } }) =>
-				new PullRequest(pr.number, pr.base.ref, pr.head.ref),
+			(pr: {
+				number: number;
+				base: { ref: string };
+				head: { ref: string };
+				labels: { name: string }[];
+			}) =>
+				new PullRequest(
+					pr.number,
+					pr.base.ref,
+					pr.head.ref,
+					pr.labels.map((l) => l.name),
+				),
 		);
 	}
 }
