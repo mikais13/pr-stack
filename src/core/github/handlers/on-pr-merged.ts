@@ -1,4 +1,4 @@
-import { rebase } from "../../application/rebase";
+import { traverseRebasedPRs } from "../../application/rebase";
 import { githubApp } from "../app";
 
 githubApp.webhooks.on("pull_request.closed", async ({ payload }) => {
@@ -6,7 +6,7 @@ githubApp.webhooks.on("pull_request.closed", async ({ payload }) => {
 		return;
 	}
 	try {
-		await rebase({
+		await traverseRebasedPRs({
 			repository: payload.repository,
 			pull_request: payload.pull_request,
 		});

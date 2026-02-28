@@ -5,6 +5,7 @@
     "": {
       "name": "pr-stack",
       "dependencies": {
+        "@datastructures-js/deque": "^1.0.8",
         "hono": "^4.11.10",
         "octokit": "^5.0.5",
         "typescript": "^5.9.3",
@@ -35,6 +36,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.4.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-k2uqwLYrNNxnaoiW3RJxoMGnbKda8FuCmtYG3cOtVljs3CzWxaTR+AoXwKGHscC9thax9R4kOrtWqWN0+KdPTw=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.4.2", "", { "os": "win32", "cpu": "x64" }, "sha512-9ma7C4g8Sq3cBlRJD2yrsHXB1mnnEBdpy7PhvFrylQWQb4PoyCmPucdX7frvsSBQuFtIiKCrolPl/8tCZrKvgQ=="],
+
+    "@datastructures-js/deque": ["@datastructures-js/deque@1.0.8", "", {}, "sha512-PSBhJ2/SmeRPRHuBv7i/fHWIdSC3JTyq56qb+Rq0wjOagi0/fdV5/B/3Md5zFZus/W6OkSPMaxMKKMNMrSmubg=="],
 
     "@octokit/app": ["@octokit/app@16.1.2", "", { "dependencies": { "@octokit/auth-app": "^8.1.2", "@octokit/auth-unauthenticated": "^7.0.3", "@octokit/core": "^7.0.6", "@octokit/oauth-app": "^8.0.3", "@octokit/plugin-paginate-rest": "^14.0.0", "@octokit/types": "^16.0.0", "@octokit/webhooks": "^14.0.0" } }, "sha512-8j7sEpUYVj18dxvh0KWj6W/l6uAiVRBl1JBDVRqH1VHKAO/G5eRVl4yEoYACjakWers1DjUkcCHyJNQK47JqyQ=="],
 
