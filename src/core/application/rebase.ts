@@ -18,7 +18,89 @@ type WorkItem = {
 	rebaseOnto: string;
 };
 
-export async function traverseRebasedPRs({
+export async function cascadeRebase(
+	queue: Deque<WorkItem>,
+	gitService: GitService,
+	githubService: OctokitService,
+	octokit: Octokit,
+	owner: string,
+	repo: string,
+): Promise<void> {
+	const failures: { pr: PullRequest; error: unknown }[] = [];
+
+	while (queue.size() > 0) {
+		const workItem = queue.popFront();
+		if (!workItem) {
+			break;
+		}
+		const { sourceRef, sourceRefSHA, rebaseOnto } = workItem;
+
+		console.log(`[rebase] Fetching open PRs based on "${sourceRef}"`);
+		const dependentPRs = await githubService.getPullRequestsByBase(
+			sourceRef,
+			"open",
+		);
+		console.log(
+			`[rebase] Found ${dependentPRs.length} PR(s) with base "${sourceRef}":`,
+			dependentPRs.map((pr) => `#${pr.getNumber()} (${pr.getHead()})`),
+		);
+
+		const eligiblePRs = dependentPRs.filter((pr) =>
+			pr.getLabels().includes(REBASE_OPT_IN_LABEL),
+		);
+		const skipped = dependentPRs.length - eligiblePRs.length;
+		if (skipped > 0) {
+			console.log(
+				`[rebase] Skipping ${skipped} PR(s) without "${REBASE_OPT_IN_LABEL}" label`,
+			);
+		}
+
+		for (const pr of eligiblePRs) {
+			console.log(
+				`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${rebaseOnto})`,
+			);
+			const oldPRHeadSHA = await gitService.fetchAndGetSHA(pr.getHead());
+			try {
+				await rebase(
+					gitService,
+					octokit,
+					owner,
+					repo,
+					pr,
+					rebaseOnto,
+					sourceRefSHA,
+				);
+			} catch (error) {
+				console.error(
+					`[rebase] PR #${pr.getNumber()} (${pr.getHead()}) FAILED — skipping its dependents. Error:`,
+					error,
+				);
+				failures.push({ pr, error });
+				continue;
+			}
+
+			console.log(
+				`[rebase] PR #${pr.getNumber()} done — base updated to "${rebaseOnto}"`,
+			);
+			queue.pushBack({
+				sourceRef: pr.getHead(),
+				sourceRefSHA: oldPRHeadSHA,
+				rebaseOnto: pr.getHead(),
+			});
+		}
+	}
+
+	if (failures.length > 0) {
+		throw new Error(
+			`[rebase] ${failures.length} PR(s) failed: ` +
+				failures
+					.map((f) => `#${f.pr.getNumber()} (${f.pr.getHead()})`)
+					.join(", "),
+		);
+	}
+}
+
+export async function startRebases({
 	repository: {
 		owner: { login: owner },
 		name: repo,
@@ -54,80 +136,7 @@ export async function traverseRebasedPRs({
 				rebaseOnto: base.ref,
 			},
 		]);
-
-		while (queue.size() > 0) {
-			const workItem = queue.popFront();
-			if (!workItem) {
-				break;
-			}
-			const { sourceRef, sourceRefSHA, rebaseOnto } = workItem;
-
-			console.log(`[rebase] Fetching open PRs based on "${sourceRef}"`);
-			const dependentPRs = await githubService.getPullRequestsByBase(
-				sourceRef,
-				"open",
-			);
-			console.log(
-				`[rebase] Found ${dependentPRs.length} PR(s) with base "${sourceRef}":`,
-				dependentPRs.map((pr) => `#${pr.getNumber()} (${pr.getHead()})`),
-			);
-
-			const eligiblePRs = dependentPRs.filter((pr) =>
-				pr.getLabels().includes(REBASE_OPT_IN_LABEL),
-			);
-			const skipped = dependentPRs.length - eligiblePRs.length;
-			if (skipped > 0) {
-				console.log(
-					`[rebase] Skipping ${skipped} PR(s) without "${REBASE_OPT_IN_LABEL}" label`,
-				);
-			}
-
-			const failures: Array<{ pr: PullRequest; error: unknown }> = [];
-
-			for (const pr of eligiblePRs) {
-				console.log(
-					`[rebase] Rebasing PR #${pr.getNumber()} (${pr.getHead()} onto ${rebaseOnto})`,
-				);
-				const oldPRHeadSHA = await gitService.fetchAndGetSHA(pr.getHead());
-				try {
-					await rebase(
-						gitService,
-						octokit,
-						owner,
-						repo,
-						pr,
-						rebaseOnto,
-						sourceRefSHA,
-					);
-				} catch (error) {
-					console.error(
-						`[rebase] PR #${pr.getNumber()} (${pr.getHead()}) FAILED — skipping its dependents. Error:`,
-						error,
-					);
-					failures.push({ pr, error });
-					continue;
-				}
-
-				console.log(
-					`[rebase] PR #${pr.getNumber()} done — base updated to "${rebaseOnto}"`,
-				);
-				queue.pushBack({
-					sourceRef: pr.getHead(),
-					sourceRefSHA: oldPRHeadSHA,
-					rebaseOnto: pr.getHead(),
-				});
-			}
-
-			if (failures.length > 0) {
-				throw new Error(
-					`[rebase] ${failures.length} PR(s) failed: ` +
-						failures
-							.map((f) => `#${f.pr.getNumber()} (${f.pr.getHead()})`)
-							.join(", "),
-				);
-			}
-		}
-
+		await cascadeRebase(queue, gitService, githubService, octokit, owner, repo);
 		console.log(`[rebase] All done`);
 	} finally {
 		await $`rm -rf ${clonePath}`;
@@ -144,7 +153,7 @@ async function rebase(
 	upstreamSHA: string,
 ): Promise<void> {
 	// Step 1: local rebase (throws on unresolvable conflict — no remote changes yet)
-	await performRebase(gitService, pr.getHead(), rebaseOnto, upstreamSHA);
+	await localRebase(gitService, pr.getHead(), rebaseOnto, upstreamSHA);
 	console.log(`[rebase] Rebase complete for PR #${pr.getNumber()}, pushing`);
 
 	// Step 2: push — if this throws, remote is unchanged
@@ -198,7 +207,7 @@ function extractConflictingFiles(errorMessage: string): string[] {
 	return files;
 }
 
-async function performRebase(
+async function localRebase(
 	gitService: GitService,
 	branchRef: string,
 	newBase: string,
