@@ -184,7 +184,7 @@ function extractConflictingFiles(errorMessage: string): string[] {
 
 		// "CONFLICT (content|add/add): Merge conflict in <path>"
 		const mergeConflictMatch = line.match(/Merge conflict in (.+)$/);
-		if (mergeConflictMatch) {
+		if (mergeConflictMatch?.[1]) {
 			files.push(mergeConflictMatch[1].trim());
 			continue;
 		}
