@@ -32,3 +32,6 @@ Thumbs.db
 # Misc
 .cache/
 tmp/
+
+# Turborepo
+.turbo/
