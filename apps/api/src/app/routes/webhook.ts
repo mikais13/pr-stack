@@ -1,5 +1,5 @@
+import { githubApp } from "@pr-stack/core";
 import { type Context, Hono } from "hono";
-import { githubApp } from "../../core/github/app";
 
 const webhook = new Hono();
 

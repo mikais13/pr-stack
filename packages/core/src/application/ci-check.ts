@@ -1,6 +1,6 @@
 import { $ } from "bun";
-import type { CiCheckParams } from "../../api/schemas/ci-check.schema";
 import { getInstallationArtifacts } from "../github/auth";
+import type { CiCheckParams } from "../schemas/ci-check.schema";
 import { GitService } from "../services/git.service";
 import { OctokitService } from "../services/octokit.service";
 

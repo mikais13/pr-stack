@@ -1,5 +1,5 @@
 import { serve } from "bun";
-import app from "./api/index";
+import app from "./app/index";
 
 serve({
 	fetch: app.fetch,

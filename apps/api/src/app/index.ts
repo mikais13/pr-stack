@@ -3,9 +3,6 @@ import ci from "./routes/ci-check";
 import health from "./routes/health";
 import webhook from "./routes/webhook";
 
-// Register webhook handlers
-import "../core/github/handlers/on-pr-merged";
-
 const app = new Hono();
 
 app.route("/ci-check", ci);

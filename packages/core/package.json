@@ -1,0 +1,22 @@
+{
+	"name": "@pr-stack/core",
+	"private": true,
+	"scripts": {
+		"types:check": "tsc --noEmit --skipLibCheck",
+		"lint:check": "biome check .",
+		"lint:fix": "biome check . --write"
+	},
+	"dependencies": {
+		"@datastructures-js/deque": "^1.0.8",
+		"@octokit/plugin-retry": "^8.0.3",
+		"hono": "^4.11.10",
+		"octokit": "^5.0.5",
+		"typescript": "^5.9.3",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.2",
+		"@octokit/webhooks-types": "^7.6.1",
+		"@types/bun": "latest"
+	}
+}
