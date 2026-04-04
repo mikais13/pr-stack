@@ -28,8 +28,7 @@
 
 		// Monorepo aliases
 		"paths": {
-			"@pr-stack/core": ["./packages/core/src"],
-			"@pr-stack/api": ["./apps/api/src"]
+			"@pr-stack/core": ["./packages/core/src"]
 		}
 	}
 }
