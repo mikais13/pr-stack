@@ -1,6 +1,12 @@
 post-merge:
   commands:
-    pnpm:
+    install:
+      glob: "{package.json,bun.lock}"
+      run: bun install
+
+post-checkout:
+  commands:
+    install:
       glob: "{package.json,bun.lock}"
       run: bun install
 
