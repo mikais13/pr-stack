@@ -15,8 +15,6 @@ pre-commit:
   commands:
     biome:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
-      exclude:
-        - "bun.lock"
       run: |
         bun run biome check --write --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
       stage_fixed: true
