@@ -1,5 +1,5 @@
 {
-	"name": "@pr-stack/api",
+	"name": "api",
 	"private": true,
 	"scripts": {
 		"dev": "bun run --hot src/app/index.ts",
