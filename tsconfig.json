@@ -5,8 +5,6 @@
 		"target": "ESNext",
 		"module": "Preserve",
 		"moduleDetection": "force",
-		"jsx": "react-jsx",
-		"jsxImportSource": "hono/jsx",
 		"allowJs": true,
 		"types": ["bun"],
 
@@ -26,6 +24,12 @@
 		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false
+		"noPropertyAccessFromIndexSignature": false,
+
+		// Monorepo aliases
+		"paths": {
+			"@pr-stack/core": ["./packages/core/src"],
+			"@pr-stack/api": ["./apps/api/src"]
+		}
 	}
 }

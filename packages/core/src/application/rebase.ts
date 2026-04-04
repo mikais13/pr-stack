@@ -1,14 +1,11 @@
 import { Deque } from "@datastructures-js/deque";
 import { $ } from "bun";
 import type { Octokit } from "octokit";
-import type {
-	PullRequestData,
-	RepositoryData,
-} from "../../api/schemas/shared.schema";
 import { getInstallationArtifacts } from "../github/auth";
 import type { PullRequest } from "../models/pull-request.model";
+import type { PullRequestData, RepositoryData } from "../schemas/shared.schema";
 import { GitService } from "../services/git.service";
-import { OctokitService } from "./../services/octokit.service";
+import { OctokitService } from "../services/octokit.service";
 
 const REBASE_OPT_IN_LABEL = "pr-stack:auto-rebase";
 

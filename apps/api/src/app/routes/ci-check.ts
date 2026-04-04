@@ -1,6 +1,5 @@
+import { ciCheckParamsSchema, shouldSkipCI } from "@pr-stack/core";
 import { type Context, Hono } from "hono";
-import { shouldSkipCI } from "../../core/application/ci-check";
-import { ciCheckParamsSchema } from "../schemas/ci-check.schema";
 
 const ci = new Hono();
 

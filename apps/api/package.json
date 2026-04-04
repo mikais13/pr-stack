@@ -1,0 +1,20 @@
+{
+	"name": "@pr-stack/api",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"build": "bun build src/index.ts --outdir=dist --target=bun",
+		"types:check": "tsc --noEmit --skipLibCheck",
+		"lint:check": "biome check .",
+		"lint:fix": "biome check . --write"
+	},
+	"dependencies": {
+		"@pr-stack/core": "workspace:*",
+		"hono": "^4.11.10",
+		"typescript": "^5.9.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.2",
+		"@types/bun": "latest"
+	}
+}
