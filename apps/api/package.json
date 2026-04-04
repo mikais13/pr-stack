@@ -2,8 +2,8 @@
 	"name": "@pr-stack/api",
 	"private": true,
 	"scripts": {
-		"dev": "bun run --hot src/index.ts",
-		"build": "bun build src/index.ts --outdir=dist --target=bun",
+		"dev": "bun run --hot src/app/index.ts",
+		"build": "bun build src/app/index.ts --outdir=dist --target=bun",
 		"types:check": "tsc --noEmit --skipLibCheck",
 		"lint:check": "biome check .",
 		"lint:fix": "biome check . --write"
