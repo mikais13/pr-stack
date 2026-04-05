@@ -2,6 +2,7 @@
 	"name": "@pr-stack/core",
 	"private": true,
 	"scripts": {
+		"build": "bun build src/index.ts --outdir=dist --target=bun",
 		"types:check": "tsc --noEmit --skipLibCheck",
 		"lint:check": "biome check .",
 		"lint:fix": "biome check . --write"
