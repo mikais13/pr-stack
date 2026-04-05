@@ -7,6 +7,7 @@ app = "pr-stack"
 primary_region = "syd"
 
 [build]
+  dockerfile = "apps/api/Dockerfile"
 
 [http_service]
   internal_port = 8080
