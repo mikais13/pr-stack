@@ -35,7 +35,11 @@ jobs:
         id: cache-check
         uses: actions/cache@v4
         with:
-          path: node_modules
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+            apps/*/node_modules
           key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
           lookup-only: true
 
@@ -51,7 +55,11 @@ jobs:
         if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: node_modules
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+            apps/*/node_modules
           key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
   
   type-check:
@@ -69,7 +77,11 @@ jobs:
         id: cache-check
         uses: actions/cache@v4
         with:
-          path: node_modules
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+            apps/*/node_modules
           key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-node_modules
 
@@ -95,7 +107,11 @@ jobs:
         id: cache-check
         uses: actions/cache@v4
         with:
-          path: node_modules
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+            apps/*/node_modules
           key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-node_modules
       
