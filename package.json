@@ -13,6 +13,8 @@
 		"build": "turbo run build",
 		"build:api": "turbo run build --filter=api",
 		"types:check": "turbo run types:check",
+		"test": "turbo run test",
+		"test:core": "turbo run test --filter=@pr-stack/core",
 		"lint:check": "turbo run lint:check",
 		"lint:fix": "turbo run lint:fix",
 		"prepare:lefthook": "lefthook install && bun -e \"const fs=require('node:fs'); fs.writeFileSync('node_modules/lefthook/bin/index.js', fs.readFileSync('node_modules/lefthook/bin/index.js', 'utf8').replace(/^#!\\/usr\\/bin\\/env\\s+node/gm, '#!\\/usr\\/bin\\/env bun'))\"",

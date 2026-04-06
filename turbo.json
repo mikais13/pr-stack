@@ -11,6 +11,8 @@
 		"types:check": {
 			"dependsOn": ["^types:check"]
 		},
+		"test": {},
+		"test:core": {},
 		"lint:check": {},
 		"lint:fix": {}
 	},
