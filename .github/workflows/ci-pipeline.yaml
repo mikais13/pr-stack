@@ -92,6 +92,36 @@ jobs:
       - name: Run type check
         run: bun types:check
   
+  test:
+    name: Run Tests
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      
+      - name: Restore node_modules cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+            apps/*/node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-node_modules
+      
+      - name: Install dependencies if cache was not hit
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile --ignore-scripts
+      
+      - name: Run Tests
+        run: bun run test
+  
   build:
     name: Build API
     needs: [setup]
