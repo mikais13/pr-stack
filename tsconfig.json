@@ -24,11 +24,6 @@
 		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false,
-
-		// Monorepo aliases
-		"paths": {
-			"@pr-stack/core": ["./packages/core/src"]
-		}
+		"noPropertyAccessFromIndexSignature": false
 	}
 }
