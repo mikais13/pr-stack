@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { Deque } from "@datastructures-js/deque";
 import { $ } from "bun";
 import type { Octokit } from "octokit";
@@ -203,7 +203,8 @@ describe("cascadeRebase", () => {
 		).rejects.toThrow("2 PR(s) failed");
 	});
 
-	it("fails when push throws", async () => {
+	it("fails when push throws and logs that remote is unchanged", async () => {
+		const consoleErrorSpy = spyOn(console, "error");
 		const pr = makePR(1, "feat", "main");
 		(gitService.push as ReturnType<typeof mock>).mockImplementation(
 			async () => {
@@ -219,9 +220,18 @@ describe("cascadeRebase", () => {
 		await expect(
 			cascadeRebase(queue, gitService, githubService, octokit, "owner", "repo"),
 		).rejects.toThrow("1 PR(s) failed");
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringMatching(/git push failed.*Remote is unchanged/),
+			}),
+		);
+		consoleErrorSpy.mockRestore();
 	});
 
-	it("fails when GitHub base update throws", async () => {
+	it("fails when GitHub base update throws and logs that manual update is required", async () => {
+		const consoleErrorSpy = spyOn(console, "error");
 		const pr = makePR(1, "feat", "main");
 		octokit = makeMockOctokit(async () => {
 			throw new Error("API error");
@@ -235,6 +245,16 @@ describe("cascadeRebase", () => {
 		await expect(
 			cascadeRebase(queue, gitService, githubService, octokit, "owner", "repo"),
 		).rejects.toThrow("1 PR(s) failed");
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringMatching(
+					/GitHub base update FAILED.*Manual update/s,
+				),
+			}),
+		);
+		consoleErrorSpy.mockRestore();
 	});
 
 	it("returns immediately for an empty queue", async () => {
@@ -273,12 +293,16 @@ describe("cascadeRebase", () => {
 		expect(gitService.rebase).not.toHaveBeenCalled();
 	});
 
-	it("calls abortRebase when rebase throws a ShellError", async () => {
+	it("calls abortRebase and extracts conflict files (Merge conflict in pattern)", async () => {
+		const consoleErrorSpy = spyOn(console, "error");
 		const pr = makePR(1, "feat", "main");
 		(gitService.rebase as ReturnType<typeof mock>).mockImplementation(
 			async () => {
 				throw makeShellError(
-					"CONFLICT (content): Merge conflict in src/index.ts",
+					"Auto-merging src/index.ts\n" +
+						"CONFLICT (content): Merge conflict in src/index.ts\n" +
+						"CONFLICT (content): Merge conflict in lib/utils.ts\n" +
+						"Automatic merge failed; fix conflicts and then commit the result.",
 				);
 			},
 		);
@@ -293,6 +317,90 @@ describe("cascadeRebase", () => {
 		).rejects.toThrow("1 PR(s) failed");
 
 		expect(gitService.abortRebase).toHaveBeenCalledTimes(1);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("2 file(s)"),
+			}),
+		);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("src/index.ts"),
+			}),
+		);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("lib/utils.ts"),
+			}),
+		);
+		consoleErrorSpy.mockRestore();
+	});
+
+	it("extracts conflict files using modify/delete pattern", async () => {
+		const consoleErrorSpy = spyOn(console, "error");
+		const pr = makePR(1, "feat", "main");
+		(gitService.rebase as ReturnType<typeof mock>).mockImplementation(
+			async () => {
+				throw makeShellError(
+					"CONFLICT (modify/delete): README.md deleted in HEAD and modified in feat",
+				);
+			},
+		);
+
+		const githubService = makeMockGithubService((base) =>
+			base === "merged-branch" ? [pr] : [],
+		);
+		const queue = new Deque([makeWorkItem("merged-branch", "main")]);
+
+		await expect(
+			cascadeRebase(queue, gitService, githubService, octokit, "owner", "repo"),
+		).rejects.toThrow("1 PR(s) failed");
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("README.md"),
+			}),
+		);
+		consoleErrorSpy.mockRestore();
+	});
+
+	it("extracts conflict files from mixed CONFLICT patterns", async () => {
+		const consoleErrorSpy = spyOn(console, "error");
+		const pr = makePR(1, "feat", "main");
+		(gitService.rebase as ReturnType<typeof mock>).mockImplementation(
+			async () => {
+				throw makeShellError(
+					"CONFLICT (content): Merge conflict in src/app.ts\n" +
+						"CONFLICT (modify/delete): docs/guide.md deleted in HEAD and modified in feat",
+				);
+			},
+		);
+
+		const githubService = makeMockGithubService((base) =>
+			base === "merged-branch" ? [pr] : [],
+		);
+		const queue = new Deque([makeWorkItem("merged-branch", "main")]);
+
+		await expect(
+			cascadeRebase(queue, gitService, githubService, octokit, "owner", "repo"),
+		).rejects.toThrow("1 PR(s) failed");
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("src/app.ts"),
+			}),
+		);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("FAILED"),
+			expect.objectContaining({
+				message: expect.stringContaining("docs/guide.md"),
+			}),
+		);
+		consoleErrorSpy.mockRestore();
 	});
 
 	it("throws immediately when fetchAndGetSHA fails (not accumulated)", async () => {
