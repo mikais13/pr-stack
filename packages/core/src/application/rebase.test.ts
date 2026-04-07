@@ -1,13 +1,32 @@
-import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { mock } from "bun:test";
+
+// Mock auth before importing the module under test — getInstallationArtifacts
+// reads env vars at call time, which are unavailable in tests.
+mock.module("../github/auth", () => ({
+	getInstallationArtifacts: async () => ({
+		octokit: mockOctokit,
+		token: "fake-token",
+	}),
+}));
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { Deque } from "@datastructures-js/deque";
 import { $ } from "bun";
 import type { Octokit } from "octokit";
 import { PullRequest } from "../models/pull-request.model";
-import type { GitService } from "../services/git.service";
-import type { OctokitService } from "../services/octokit.service";
-import { cascadeRebase } from "./rebase";
+import { GitService } from "../services/git.service";
+import { OctokitService } from "../services/octokit.service";
+import { cascadeRebase, startRebases } from "./rebase";
 
 const LABEL = "pr-stack:auto-rebase";
+
+const mockOctokit = {
+	rest: {
+		pulls: {
+			update: mock(async () => {}),
+		},
+	},
+};
 
 function makeWorkItem(
 	sourceRef: string,
@@ -61,6 +80,119 @@ function makeMockOctokit(updateFn?: () => Promise<void>): Octokit {
 		},
 	} as unknown as Octokit;
 }
+
+function makeInput() {
+	return {
+		repository: {
+			name: "repo",
+			full_name: "owner/repo",
+			owner: { login: "owner" },
+		},
+		pull_request: {
+			number: 1,
+			state: "open",
+			title: "My PR",
+			head: { label: "owner:feat", ref: "feat", sha: "head-sha" },
+			base: { label: "owner:main", ref: "main", sha: "base-sha" },
+		},
+	};
+}
+
+describe("startRebases", () => {
+	let cloneRepoSpy: ReturnType<typeof spyOn<GitService, "cloneRepo">>;
+	let fetchAndGetSHASpy: ReturnType<typeof spyOn<GitService, "fetchAndGetSHA">>;
+	let rebaseSpy: ReturnType<typeof spyOn<GitService, "rebase">>;
+	let pushSpy: ReturnType<typeof spyOn<GitService, "push">>;
+	let abortRebaseSpy: ReturnType<typeof spyOn<GitService, "abortRebase">>;
+	let getPRsByBaseSpy: ReturnType<
+		typeof spyOn<OctokitService, "getPullRequestsByBase">
+	>;
+
+	afterEach(() => {
+		cloneRepoSpy.mockRestore();
+		fetchAndGetSHASpy.mockRestore();
+		rebaseSpy.mockRestore();
+		pushSpy.mockRestore();
+		abortRebaseSpy.mockRestore();
+		getPRsByBaseSpy.mockRestore();
+		(mockOctokit.rest.pulls.update as ReturnType<typeof mock>).mockReset();
+	});
+
+	it("clones the repo and completes when no dependent PRs are found", async () => {
+		cloneRepoSpy = spyOn(GitService.prototype, "cloneRepo").mockResolvedValue(
+			undefined,
+		);
+		fetchAndGetSHASpy = spyOn(
+			GitService.prototype,
+			"fetchAndGetSHA",
+		).mockResolvedValue("old-sha");
+		rebaseSpy = spyOn(GitService.prototype, "rebase").mockResolvedValue("");
+		pushSpy = spyOn(GitService.prototype, "push").mockResolvedValue(undefined);
+		abortRebaseSpy = spyOn(
+			GitService.prototype,
+			"abortRebase",
+		).mockResolvedValue(undefined);
+		getPRsByBaseSpy = spyOn(
+			OctokitService.prototype,
+			"getPullRequestsByBase",
+		).mockResolvedValue([]);
+
+		await startRebases(makeInput());
+
+		expect(cloneRepoSpy).toHaveBeenCalledTimes(1);
+		expect(cloneRepoSpy).toHaveBeenCalledWith(
+			"https://github.com/owner/repo.git",
+			{ bare: false },
+		);
+	});
+
+	it("throws when cloneRepo fails", async () => {
+		cloneRepoSpy = spyOn(GitService.prototype, "cloneRepo").mockRejectedValue(
+			new Error("clone error"),
+		);
+		fetchAndGetSHASpy = spyOn(
+			GitService.prototype,
+			"fetchAndGetSHA",
+		).mockResolvedValue("old-sha");
+		rebaseSpy = spyOn(GitService.prototype, "rebase").mockResolvedValue("");
+		pushSpy = spyOn(GitService.prototype, "push").mockResolvedValue(undefined);
+		abortRebaseSpy = spyOn(
+			GitService.prototype,
+			"abortRebase",
+		).mockResolvedValue(undefined);
+		getPRsByBaseSpy = spyOn(
+			OctokitService.prototype,
+			"getPullRequestsByBase",
+		).mockResolvedValue([]);
+
+		expect(startRebases(makeInput())).rejects.toThrow("clone error");
+	});
+
+	it("throws when cascadeRebase fails due to a rebase conflict", async () => {
+		const pr = new PullRequest(2, "feat", "head-sha-pr", [LABEL]);
+		cloneRepoSpy = spyOn(GitService.prototype, "cloneRepo").mockResolvedValue(
+			undefined,
+		);
+		fetchAndGetSHASpy = spyOn(
+			GitService.prototype,
+			"fetchAndGetSHA",
+		).mockResolvedValue("old-sha");
+		rebaseSpy = spyOn(GitService.prototype, "rebase").mockRejectedValue(
+			new Error("conflict"),
+		);
+		pushSpy = spyOn(GitService.prototype, "push").mockResolvedValue(undefined);
+		abortRebaseSpy = spyOn(
+			GitService.prototype,
+			"abortRebase",
+		).mockResolvedValue(undefined);
+		getPRsByBaseSpy = spyOn(
+			OctokitService.prototype,
+			"getPullRequestsByBase",
+		).mockResolvedValue([pr]);
+
+		expect(startRebases(makeInput())).rejects.toThrow("PR(s) failed");
+	});
+});
 
 describe("cascadeRebase", () => {
 	let gitService: GitService;
